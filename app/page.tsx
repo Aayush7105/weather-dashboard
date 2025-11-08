@@ -3,7 +3,77 @@ import WeatherAreaChart from "@/components/WeatherAreaChart";
 import { useState } from "react";
 import { Search, Droplets, Eye } from "lucide-react";
 import { FiSunrise, FiSunset } from "react-icons/fi";
+import Time from "@/components/time";
 export default function WeatherDashboard() {
+  async function fetchHourly(city: string) {
+    try {
+      const res = await fetch(`/api/hourly?city=${city}`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        console.error("❌ Failed to fetch hourly data:", data);
+        return [];
+      }
+
+      // Format the first 8 data points (24 hours, 3-hour intervals)
+      interface HourlyEntry {
+        dt: number;
+        main: {
+          temp: number;
+        };
+      }
+      const hourlyData = data.list.slice(0, 8).map((entry: HourlyEntry) => ({
+        time: new Date(entry.dt * 1000).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        temp: entry.main.temp,
+      }));
+
+      console.log("✅ Hourly temp data:", hourlyData);
+      return hourlyData;
+    } catch (err) {
+      console.error("⚠️ Error fetching hourly:", err);
+      return [];
+    }
+  }
+
+  const fetchForecast = async (city: string) => {
+    try {
+      const res = await fetch(`/api/forecast?city=${city}`);
+      const data = await res.json();
+      if (res.ok) {
+        console.log("🌤 Forecast data:", data.hourlyData);
+        return data.hourlyData;
+      } else {
+        console.error("❌ Forecast error:", data.error);
+        return [];
+      }
+    } catch (err) {
+      console.error("⚠️ Forecast fetch error:", err);
+      return [];
+    }
+  };
+
+  async function fetchAQI(lat: number, lon: number) {
+    try {
+      const res = await fetch(`/api/airquality?lat=${lat}&lon=${lon}`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        console.error("❌ Failed to fetch AQI:", data);
+        return null;
+      }
+
+      const aqi = data.list?.[0]?.main?.aqi ?? null;
+      console.log("✅ AQI Fetched:", aqi);
+      return aqi;
+    } catch (err) {
+      console.error("⚠️ Error fetching AQI:", err);
+      return null;
+    }
+  }
+
   // timezone is seconds offset from UTC from OpenWeather (e.g. 19800 for +05:30)
   function formatTime_LocalToCity(
     unixSeconds: number,
@@ -44,21 +114,33 @@ export default function WeatherDashboard() {
       sunset: number;
     };
     coord: { lat: number; lon: number }; // ✅ Add this line
-    aqi?: number | null; // ✅ Optional AQI field
   }
 
   const [weather, setWeather] = useState<WeatherData | null>(null);
+
+  const [aqi, setAqi] = useState<number | null>(null);
+
+  const [forecastData, setForecastData] = useState<
+    { time: string; temp: number }[]
+  >([]);
 
   async function handleSearch() {
     try {
       const data = await fetchWeather(city);
       setWeather(data);
 
-      console.log("Fetched Weather Data:", data);
+      // Fetch AQI using coordinates from weather response
+      if (data.coord) {
+        const fetchedAQI = await fetchAQI(data.coord.lat, data.coord.lon);
+        setAqi(fetchedAQI);
+      }
+      const hourlyData = await fetchForecast(city);
+      setForecastData(hourlyData);
     } catch (error) {
       console.error(error);
     }
   }
+
   return (
     <div className="flex max-h-screen items-center justify-center">
       <div className="m-4 min-h-screen w-[92%] scale-[0.80] rounded-[30px] bg-neutral-950">
@@ -107,12 +189,7 @@ export default function WeatherDashboard() {
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-2xl font-semibold text-foreground">
-                  7:50 pm
-                </p>
-                <p className="text-sm text-foreground/70">
-                  Sunset Time, Monday
-                </p>
+                <Time />
               </div>
             </div>
           </div>
@@ -154,21 +231,11 @@ export default function WeatherDashboard() {
             <div className="rounded-2xl border-2 border-primary/10 bg-neutral-900 p-6">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="mb-1 text-sm text-foreground/60">UV Index</p>
-                  <p
-                    className={`text-3xl font-bold ${
-                      weather?.aqi === 1
-                        ? "text-green-400"
-                        : weather?.aqi === 2
-                          ? "text-lime-400"
-                          : weather?.aqi === 3
-                            ? "text-yellow-400"
-                            : weather?.aqi === 4
-                              ? "text-orange-500"
-                              : "text-red-500"
-                    }`}
-                  >
-                    10
+                  <p className="mb-1 text-sm text-foreground/60">
+                    Air Quality Index
+                  </p>
+                  <p className="text-3xl font-bold text-primary">
+                    {aqi !== null ? aqi : "N/A"}
                   </p>
                 </div>
                 <div className="rounded-lg bg-primary/10 p-3">
@@ -202,7 +269,9 @@ export default function WeatherDashboard() {
             <div className="flex items-center justify-center rounded-2xl border-2 border-primary/10 bg-neutral-900 px-8 pb-8">
               {/* Chart Container Div */}
               <div className="mt-8 w-full">
-                <WeatherAreaChart />
+                {forecastData.length > 0 && (
+                  <WeatherAreaChart chartData={forecastData} />
+                )}
               </div>
             </div>
 

@@ -11,26 +11,27 @@ import {
 import { ChartConfig, ChartContainer } from "@/components/ui/chart";
 import { Badge } from "@/components/ui/badge";
 import { TrendingUp } from "lucide-react";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useSpring, useMotionValueEvent } from "motion/react";
 
-const chartData = [
-  { month: "January", desktop: 186 },
-  { month: "February", desktop: 305 },
-  { month: "March", desktop: 237 },
-  { month: "April", desktop: 73 },
-  { month: "May", desktop: 209 },
-  { month: "June", desktop: 214 },
-];
+interface WeatherAreaChartProps {
+  chartData?: { time: string; temp: number }[];
+  city?: string;
+}
 
-const chartConfig = {
-  desktop: {
-    label: "Desktop",
-    color: "var(--chart-1)",
-  },
-} satisfies ChartConfig;
-
-export default function WeatherAreaChart() {
+export default function WeatherAreaChart({
+  chartData = [
+    { time: "00:00", temp: 26 },
+    { time: "03:00", temp: 25 },
+    { time: "06:00", temp: 24 },
+    { time: "09:00", temp: 28 },
+    { time: "12:00", temp: 31 },
+    { time: "15:00", temp: 30 },
+    { time: "18:00", temp: 27 },
+    { time: "21:00", temp: 26 },
+  ],
+  city = "Delhi",
+}: WeatherAreaChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const [axis, setAxis] = useState(0);
 
@@ -39,11 +40,25 @@ export default function WeatherAreaChart() {
 
   useMotionValueEvent(springX, "change", (latest) => setAxis(latest));
 
+  // Initialize line to end of chart on mount
+  useEffect(() => {
+    if (chartData.length > 0) {
+      springY.set(chartData[chartData.length - 1].temp);
+    }
+  }, [chartData, springY]);
+
+  const chartConfig = {
+    temp: {
+      label: "Temperature (°C)",
+      color: "var(--chart-1)",
+    },
+  } satisfies ChartConfig;
+
   return (
     <Card className="rounded-xl border border-white/10 bg-neutral-900 shadow-lg backdrop-blur-xl">
       <CardHeader>
         <CardTitle className="flex items-center text-lg text-white">
-          ${springY.get().toFixed(0)}
+          {springY.get().toFixed(0)}°C
           <Badge
             variant="secondary"
             className="ml-2 bg-green-500/20 text-green-300"
@@ -53,7 +68,7 @@ export default function WeatherAreaChart() {
           </Badge>
         </CardTitle>
         <CardDescription className="text-neutral-300">
-          Desktop usage (last 6 months)
+          Temperature forecast for {city}
         </CardDescription>
       </CardHeader>
 
@@ -77,7 +92,7 @@ export default function WeatherAreaChart() {
             }}
             onMouseLeave={() => {
               springX.set(chartRef.current?.getBoundingClientRect().width || 0);
-              springY.jump(chartData[chartData.length - 1].desktop);
+              springY.jump(chartData[chartData.length - 1].temp);
             }}
             margin={{ right: 0, left: 0 }}
           >
@@ -92,19 +107,19 @@ export default function WeatherAreaChart() {
             />
 
             <XAxis
-              dataKey="month"
+              dataKey="time"
               tickLine={false}
               axisLine={false}
               tickMargin={8}
-              tickFormatter={(value) => value.slice(0, 3)}
+              tickFormatter={(value) => value}
               tick={{ fill: "#ff7f7f" }}
             />
 
             {/* Main animated clipped area */}
             <Area
-              dataKey="desktop"
+              dataKey="temp"
               type="monotone"
-              fill="url(#gradient-cliped-area-desktop)"
+              fill="url(#gradient-cliped-area-temp)"
               fillOpacity={0.35}
               stroke="#f59e0b"
               strokeWidth={2}
@@ -142,12 +157,12 @@ export default function WeatherAreaChart() {
               textAnchor="middle"
               fill="#fff"
             >
-              ${springY.get().toFixed(0)}
+              {springY.get().toFixed(0)}°C
             </text>
 
             {/* Background ghost line */}
             <Area
-              dataKey="desktop"
+              dataKey="temp"
               type="monotone"
               fill="none"
               stroke="#f59e0b"
@@ -157,7 +172,7 @@ export default function WeatherAreaChart() {
             {/* Gradient */}
             <defs>
               <linearGradient
-                id="gradient-cliped-area-desktop"
+                id="gradient-cliped-area-temp"
                 x1="0"
                 y1="0"
                 x2="0"
