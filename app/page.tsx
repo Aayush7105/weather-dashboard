@@ -5,39 +5,6 @@ import { Search, Droplets, Eye } from "lucide-react";
 import { FiSunrise, FiSunset } from "react-icons/fi";
 import Time from "@/components/time";
 export default function WeatherDashboard() {
-  async function fetchHourly(city: string) {
-    try {
-      const res = await fetch(`/api/hourly?city=${city}`);
-      const data = await res.json();
-
-      if (!res.ok) {
-        console.error("❌ Failed to fetch hourly data:", data);
-        return [];
-      }
-
-      // Format the first 8 data points (24 hours, 3-hour intervals)
-      interface HourlyEntry {
-        dt: number;
-        main: {
-          temp: number;
-        };
-      }
-      const hourlyData = data.list.slice(0, 8).map((entry: HourlyEntry) => ({
-        time: new Date(entry.dt * 1000).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-        temp: entry.main.temp,
-      }));
-
-      console.log("✅ Hourly temp data:", hourlyData);
-      return hourlyData;
-    } catch (err) {
-      console.error("⚠️ Error fetching hourly:", err);
-      return [];
-    }
-  }
-
   const fetchForecast = async (city: string) => {
     try {
       const res = await fetch(`/api/forecast?city=${city}`);
@@ -269,9 +236,7 @@ export default function WeatherDashboard() {
             <div className="flex items-center justify-center rounded-2xl border-2 border-primary/10 bg-neutral-900 px-8 pb-8">
               {/* Chart Container Div */}
               <div className="mt-8 w-full">
-                {forecastData.length > 0 && (
-                  <WeatherAreaChart chartData={forecastData} />
-                )}
+                <WeatherAreaChart city={city} chartData={forecastData} />
               </div>
             </div>
 
