@@ -19,6 +19,7 @@ export async function GET(request: Request) {
       `${BASE_URL}?q=${city}&units=metric&appid=${API_KEY}`,
     );
     const data = await res.json();
+    console.log("🔍 Full Weather Data:", data);
 
     if (!res.ok) {
       return NextResponse.json({ error: data.message }, { status: res.status });

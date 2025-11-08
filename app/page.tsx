@@ -53,6 +53,7 @@ export default function WeatherDashboard() {
     try {
       const data = await fetchWeather(city);
       setWeather(data);
+
       console.log("Fetched Weather Data:", data);
     } catch (error) {
       console.error(error);
