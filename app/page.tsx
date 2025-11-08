@@ -1,48 +1,39 @@
 "use client";
 import WeatherAreaChart from "@/components/WeatherAreaChart";
-import { ReactNode, useState } from "react";
+import { useState } from "react";
 import { Search, Droplets, Eye } from "lucide-react";
 import { FiSunrise, FiSunset } from "react-icons/fi";
 export default function WeatherDashboard() {
-  async function fetchUVIndex(lat: number, lon: number) {
-    let uvIndex = 0;
-    let data;
-    try {
-      const res = await fetch(
-        `https://api.openweathermap.org/data/2.5/onecall?lat=${lat}&lon=${lon}&exclude=minutely,hourly,daily,alerts&appid=${process.env.NEXT_PUBLIC_OPENWEATHER_API_KEY}`,
-      );
-      if (res.ok) {
-        data = await res.json();
-        uvIndex = data?.current?.uvi ?? 0;
-      }
-    } catch (error) {
-      console.error("Failed to fetch UV Index:", error);
-    }
-    return uvIndex;
-  }
+  // timezone is seconds offset from UTC from OpenWeather (e.g. 19800 for +05:30)
+  function formatTime_LocalToCity(
+    unixSeconds: number,
+    timezoneOffsetSeconds: number,
+  ) {
+    // create a Date that already represents the city's local wall-clock time in UTC
+    const shifted = new Date((unixSeconds + timezoneOffsetSeconds) * 1000);
 
-  function formatTime(unixTime: number, timezone: number): string {
-    const date = new Date((unixTime + timezone) * 1000); // Convert to ms and adjust timezone
-    return date.toLocaleTimeString("en-US", {
+    // Format it as UTC so the browser does not convert it to the user's timezone
+    return new Intl.DateTimeFormat("en-IN", {
       hour: "2-digit",
       minute: "2-digit",
-    });
+      hour12: true,
+      timeZone: "UTC", // IMPORTANT: format the already-shifted time as UTC
+    }).format(shifted);
   }
 
   async function fetchWeather(city: string) {
     const res = await fetch(`/api/weather?city=${city}`);
     if (!res.ok) throw new Error("Failed to fetch weather data");
     const data = await res.json();
-    const uv = await fetchUVIndex(data.coord.lat, data.coord.lon);
-    data.uv = uv; // Attach to object for easy use later
 
     return data;
   }
 
   const [city, setCity] = useState("Delhi");
   interface WeatherData {
+    timezone: number;
     main: {
-      humidity: ReactNode;
+      humidity: number;
       temp: number;
     };
     weather: Array<{
@@ -52,8 +43,8 @@ export default function WeatherDashboard() {
       sunrise: number;
       sunset: number;
     };
-    timezone: number;
-    uv: number; // Add UV index property
+    coord: { lat: number; lon: number }; // ✅ Add this line
+    aqi?: number | null; // ✅ Optional AQI field
   }
 
   const [weather, setWeather] = useState<WeatherData | null>(null);
@@ -62,6 +53,7 @@ export default function WeatherDashboard() {
     try {
       const data = await fetchWeather(city);
       setWeather(data);
+      console.log("Fetched Weather Data:", data);
     } catch (error) {
       console.error(error);
     }
@@ -145,7 +137,10 @@ export default function WeatherDashboard() {
                   <p className="text-3xl font-bold text-primary">
                     {" "}
                     {weather
-                      ? formatTime(weather.sys.sunset, weather.timezone)
+                      ? formatTime_LocalToCity(
+                          weather.sys.sunset,
+                          weather.timezone,
+                        )
                       : "N/A"}
                   </p>
                 </div>
@@ -160,9 +155,19 @@ export default function WeatherDashboard() {
                 <div>
                   <p className="mb-1 text-sm text-foreground/60">UV Index</p>
                   <p
-                    className={`font-medium ${weather && weather.uv > 7 ? "text-red-500" : weather && weather.uv > 5 ? "text-yellow-400" : "text-green-400"}`}
+                    className={`text-3xl font-bold ${
+                      weather?.aqi === 1
+                        ? "text-green-400"
+                        : weather?.aqi === 2
+                          ? "text-lime-400"
+                          : weather?.aqi === 3
+                            ? "text-yellow-400"
+                            : weather?.aqi === 4
+                              ? "text-orange-500"
+                              : "text-red-500"
+                    }`}
                   >
-                    UV Index: {weather ? Math.round(weather.uv) : "N/A"}
+                    10
                   </p>
                 </div>
                 <div className="rounded-lg bg-primary/10 p-3">
@@ -177,7 +182,10 @@ export default function WeatherDashboard() {
                   <p className="mb-1 text-sm text-foreground/60">Sunrise</p>
                   <p className="text-3xl font-bold text-primary">
                     {weather
-                      ? formatTime(weather.sys.sunrise, weather.timezone)
+                      ? formatTime_LocalToCity(
+                          weather.sys.sunrise,
+                          weather.timezone,
+                        )
                       : "N/A"}
                   </p>
                 </div>
