@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Search, Droplets, Eye } from "lucide-react";
 import { FiSunrise, FiSunset } from "react-icons/fi";
 import Time from "@/components/time";
+import { TiWeatherPartlySunny } from "react-icons/ti";
 export default function WeatherDashboard() {
   const fetchForecast = async (city: string) => {
     try {
@@ -87,9 +88,17 @@ export default function WeatherDashboard() {
 
   const [aqi, setAqi] = useState<number | null>(null);
 
+  // city state is already declared above; removed duplicate declaration
+
   const [forecastData, setForecastData] = useState<
     { time: string; temp: number }[]
   >([]);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement> | null) => {
+    if (e && e.key === "Enter" && city.trim() !== "") {
+      handleSearch();
+    }
+  };
 
   async function handleSearch() {
     try {
@@ -113,9 +122,19 @@ export default function WeatherDashboard() {
       <div className="m-4 min-h-screen w-[92%] scale-[0.80] rounded-[30px] bg-neutral-950">
         <div className="max-w-10xl mx-auto p-10">
           <div className="mb-8 flex items-center justify-between">
-            <h1 className="font-sans text-4xl font-bold text-neutral-100">
-              Weather-Dashboard
-            </h1>
+            <div className="gap-3">
+              <div className="flex justify-center gap-3">
+                <TiWeatherPartlySunny className="mt-2 h-8 w-8 text-yellow-400" />{" "}
+                <h1 className="text-4xl font-bold text-gray-100">
+                  Weather Dashboard
+                </h1>
+              </div>
+
+              <div className="text-md px-11 text-gray-500">
+                Updated in real-time
+              </div>
+            </div>
+
             <div className="flex items-center gap-4">
               <div className="relative">
                 <input
@@ -123,22 +142,14 @@ export default function WeatherDashboard() {
                   value={city}
                   placeholder="Enter city name.."
                   onChange={(e) => setCity(e.target.value)}
+                  onKeyDown={handleKeyDown}
                   className="rounded-lg border-2 border-primary/20 bg-neutral-900 py-2 pl-4 pr-10 text-foreground placeholder-gray-400 focus:border-primary focus:outline-none"
                 />
                 <Search
                   onClick={handleSearch}
-                  className="absolute right-3 top-2.5 h-5 w-5 text-primary/60"
+                  className="absolute right-3 top-2.5 h-5 w-5 cursor-pointer text-primary/60"
                 />
               </div>
-              <button className="rounded-lg p-2 transition hover:bg-neutral-900/50">
-                <svg
-                  className="h-6 w-6 text-primary"
-                  fill="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z" />
-                </svg>
-              </button>
             </div>
           </div>
           {/* Main Weather Card */}
