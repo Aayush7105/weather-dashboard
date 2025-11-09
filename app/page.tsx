@@ -103,17 +103,36 @@ export default function WeatherDashboard() {
   async function handleSearch() {
     try {
       const data = await fetchWeather(city);
+
+      // ✅ Check for invalid city response (like "city not found")
+      if (data.cod === "404" || data.message === "city not found") {
+        setWeather(null);
+        setAqi(null);
+        setForecastData([]);
+        setCity("Unknown location");
+        return;
+      }
+
+      // ✅ Normal case: valid weather data
       setWeather(data);
 
-      // Fetch AQI using coordinates from weather response
+      // ✅ Fetch AQI using coordinates from weather response
       if (data.coord) {
         const fetchedAQI = await fetchAQI(data.coord.lat, data.coord.lon);
         setAqi(fetchedAQI);
       }
+
+      // ✅ Fetch forecast data
       const hourlyData = await fetchForecast(city);
       setForecastData(hourlyData);
     } catch (error) {
-      console.error(error);
+      console.error("❌ Error fetching weather data:", error);
+
+      // ✅ Handle any other runtime/network errors
+      setWeather(null);
+      setAqi(null);
+      setForecastData([]);
+      setCity("Unknown location");
     }
   }
 
