@@ -91,8 +91,17 @@ export default function WeatherAreaChart({
               }
             }}
             onMouseLeave={() => {
-              springX.set(chartRef.current?.getBoundingClientRect().width || 0);
-              springY.jump(chartData[chartData.length - 1].temp);
+              const width =
+                chartRef.current?.getBoundingClientRect().width ?? 0;
+              springX.set(width);
+
+              const lastIndex = (chartData?.length ?? 0) - 1;
+              const lastTemp =
+                lastIndex >= 0 && chartData?.[lastIndex]?.temp != null
+                  ? chartData[lastIndex].temp
+                  : 0;
+
+              springY.jump(lastTemp);
             }}
             margin={{ right: 0, left: 0 }}
           >
