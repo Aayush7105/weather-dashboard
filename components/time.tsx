@@ -36,10 +36,10 @@ export default function Time() {
   }, []);
 
   return (
-    <div className="text-right text-white">
-      <div className="text-3xl font-semibold">{time}</div>
-      <div className="text-lg opacity-80">{day}</div>
-      <div className="text-sm opacity-70">{date}</div>
+    <div className="text-left text-white sm:text-right">
+      <div className="text-2xl font-semibold sm:text-3xl">{time}</div>
+      <div className="text-base text-slate-300 sm:text-lg">{day}</div>
+      <div className="text-sm text-slate-400">{date}</div>
     </div>
   );
 }

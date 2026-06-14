@@ -9,6 +9,13 @@ body,
   height: 100%;
 }
 
+.weather-shell {
+  background:
+    linear-gradient(135deg, rgba(20, 184, 166, 0.14), transparent 34%),
+    linear-gradient(315deg, rgba(245, 158, 11, 0.12), transparent 38%),
+    #090b0f;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -70,6 +77,6 @@ body,
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
   }
 }
