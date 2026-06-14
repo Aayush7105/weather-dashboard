@@ -4,21 +4,35 @@ import WeatherAreaChart from "@/components/WeatherAreaChart";
 import Time from "@/components/time";
 import {
   ArrowLeft,
-  Cloud,
-  CloudRain,
   CloudSun,
   Droplets,
   Eye,
+  Loader2,
+  LocateFixed,
   MapPin,
   Search,
-  Sun,
   Sunrise,
   Sunset,
   type LucideIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+
+type ForecastPoint = { time: string; temp: number };
+
+type WeatherQuery = { cityName: string } | { lat: number; lon: number };
+
+type WeatherSource = "location" | "city";
+
+type LocationStatus =
+  | "requesting"
+  | "ready"
+  | "city"
+  | "denied"
+  | "unsupported"
+  | "error";
 
 interface WeatherData {
+  name?: string;
   timezone?: number;
   main?: {
     humidity: number;
@@ -37,110 +51,72 @@ interface WeatherData {
   };
   cod?: string | number;
   message?: string;
+  error?: string;
 }
 
-const forecastDays: Array<{
-  day: string;
-  temp: number;
-  label: string;
-  Icon: LucideIcon;
-  tone: string;
-}> = [
-  {
-    day: "MON",
-    temp: 13,
-    label: "Sunny",
-    Icon: Sun,
-    tone: "border-amber-300/25 bg-amber-300/10 text-amber-200",
-  },
-  {
-    day: "TUE",
-    temp: 12,
-    label: "Partly sunny",
-    Icon: CloudSun,
-    tone: "border-sky-300/25 bg-sky-300/10 text-sky-200",
-  },
-  {
-    day: "WED",
-    temp: 12,
-    label: "Cloudy",
-    Icon: Cloud,
-    tone: "border-slate-300/25 bg-slate-300/10 text-slate-200",
-  },
-  {
-    day: "THU",
-    temp: 9,
-    label: "Rain",
-    Icon: CloudRain,
-    tone: "border-cyan-300/25 bg-cyan-300/10 text-cyan-200",
-  },
-  {
-    day: "FRI",
-    temp: 7,
-    label: "Rain",
-    Icon: CloudRain,
-    tone: "border-cyan-300/25 bg-cyan-300/10 text-cyan-200",
-  },
-  {
-    day: "SAT",
-    temp: 10,
-    label: "Cloudy",
-    Icon: Cloud,
-    tone: "border-slate-300/25 bg-slate-300/10 text-slate-200",
-  },
-  {
-    day: "SUN",
-    temp: 11,
-    label: "Sunny",
-    Icon: Sun,
-    tone: "border-amber-300/25 bg-amber-300/10 text-amber-200",
-  },
-];
+const locationStatusText: Record<LocationStatus, string> = {
+  requesting: "Requesting location permission...",
+  ready: "Showing weather for your current location",
+  city: "Showing weather for the searched city",
+  denied: "Location permission was denied. Search by city instead.",
+  unsupported: "Location is not available in this browser.",
+  error: "Could not load weather from your location.",
+};
+
+function getWeatherParams(query: WeatherQuery) {
+  const params = new URLSearchParams();
+
+  if ("cityName" in query) {
+    params.set("city", query.cityName);
+  } else {
+    params.set("lat", String(query.lat));
+    params.set("lon", String(query.lon));
+  }
+
+  return params.toString();
+}
+
+async function fetchWeather(query: WeatherQuery) {
+  try {
+    const res = await fetch(`/api/weather?${getWeatherParams(query)}`);
+    return await res.json();
+  } catch (err) {
+    console.error("Weather API error:", err);
+    return { cod: "500", message: "network error" };
+  }
+}
+
+async function fetchAQI(lat: number, lon: number) {
+  try {
+    const res = await fetch(`/api/airquality?lat=${lat}&lon=${lon}`);
+    const data = await res.json();
+    return data.list?.[0]?.main?.aqi ?? null;
+  } catch (err) {
+    console.error("AQI fetch error:", err);
+    return null;
+  }
+}
+
+async function fetchForecast(query: WeatherQuery): Promise<ForecastPoint[]> {
+  try {
+    const res = await fetch(`/api/forecast?${getWeatherParams(query)}`);
+    const data = await res.json();
+    return data.hourlyData || [];
+  } catch (err) {
+    console.error("Forecast fetch error:", err);
+    return [];
+  }
+}
 
 export default function WeatherDashboard() {
-  const [city, setCity] = useState("Delhi");
+  const [city, setCity] = useState("");
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [aqi, setAqi] = useState<number | null>(null);
-  const [forecastData, setForecastData] = useState<
-    { time: string; temp: number }[]
-  >([]);
+  const [forecastData, setForecastData] = useState<ForecastPoint[]>([]);
   const [invalidCity, setInvalidCity] = useState(false);
-
-  async function fetchWeather(cityName: string) {
-    try {
-      const res = await fetch(
-        `/api/weather?city=${encodeURIComponent(cityName)}`,
-      );
-      return await res.json();
-    } catch (err) {
-      console.error("Weather API error:", err);
-      return { cod: "500", message: "network error" };
-    }
-  }
-
-  async function fetchAQI(lat: number, lon: number) {
-    try {
-      const res = await fetch(`/api/airquality?lat=${lat}&lon=${lon}`);
-      const data = await res.json();
-      return data.list?.[0]?.main?.aqi ?? null;
-    } catch (err) {
-      console.error("AQI fetch error:", err);
-      return null;
-    }
-  }
-
-  async function fetchForecast(cityName: string) {
-    try {
-      const res = await fetch(
-        `/api/forecast?city=${encodeURIComponent(cityName)}`,
-      );
-      const data = await res.json();
-      return data.hourlyData || [];
-    } catch (err) {
-      console.error("Forecast fetch error:", err);
-      return [];
-    }
-  }
+  const [locationStatus, setLocationStatus] =
+    useState<LocationStatus>("requesting");
+  const [isLoading, setIsLoading] = useState(false);
 
   function formatTime_LocalToCity(
     unixSeconds: number,
@@ -156,6 +132,99 @@ export default function WeatherDashboard() {
     }).format(shifted);
   }
 
+  const loadWeather = useCallback(
+    async (query: WeatherQuery, source: WeatherSource) => {
+      setIsLoading(true);
+      setInvalidCity(false);
+
+      try {
+        const data: WeatherData = await fetchWeather(query);
+        const hasMissingWeather =
+          data.cod === "404" ||
+          data.message === "city not found" ||
+          Boolean(data.error) ||
+          !data.main;
+
+        if (hasMissingWeather) {
+          setWeather(null);
+          setAqi(null);
+          setForecastData([]);
+
+          if (source === "city") {
+            setInvalidCity(true);
+          } else {
+            setLocationStatus("error");
+          }
+
+          return;
+        }
+
+        const resolvedCity =
+          data.name ?? ("cityName" in query ? query.cityName : "Your location");
+        const lat = data.coord?.lat ?? ("lat" in query ? query.lat : null);
+        const lon = data.coord?.lon ?? ("lon" in query ? query.lon : null);
+
+        setCity(resolvedCity);
+        setWeather(data);
+
+        if (lat !== null && lon !== null) {
+          const [fetchedAQI, forecast] = await Promise.all([
+            fetchAQI(lat, lon),
+            fetchForecast({ lat, lon }),
+          ]);
+
+          setAqi(fetchedAQI);
+          setForecastData(forecast);
+        } else {
+          setAqi(null);
+          setForecastData(await fetchForecast(query));
+        }
+
+        setLocationStatus(source === "location" ? "ready" : "city");
+      } catch (err) {
+        console.error("Weather load error:", err);
+        setWeather(null);
+        setAqi(null);
+        setForecastData([]);
+        setLocationStatus("error");
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [],
+  );
+
+  const requestCurrentLocation = useCallback(() => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setLocationStatus("unsupported");
+      setIsLoading(false);
+      return;
+    }
+
+    setLocationStatus("requesting");
+    setIsLoading(true);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        loadWeather({ lat: latitude, lon: longitude }, "location");
+      },
+      (error) => {
+        setIsLoading(false);
+        setLocationStatus(error.code === error.PERMISSION_DENIED ? "denied" : "error");
+      },
+      {
+        enableHighAccuracy: false,
+        maximumAge: 10 * 60 * 1000,
+        timeout: 10000,
+      },
+    );
+  }, [loadWeather]);
+
+  useEffect(() => {
+    requestCurrentLocation();
+  }, [requestCurrentLocation]);
+
   async function handleSearch() {
     const trimmedCity = city.trim();
 
@@ -163,33 +232,7 @@ export default function WeatherDashboard() {
       return;
     }
 
-    const data = await fetchWeather(trimmedCity);
-
-    if (data.cod === "404" || data.message === "city not found") {
-      setInvalidCity(true);
-      setWeather(null);
-      setAqi(null);
-      setForecastData([]);
-      return;
-    }
-
-    if (!data.main) {
-      setInvalidCity(true);
-      setWeather(null);
-      return;
-    }
-
-    setInvalidCity(false);
-    setCity(trimmedCity);
-    setWeather(data);
-
-    if (data.coord) {
-      const fetchedAQI = await fetchAQI(data.coord.lat, data.coord.lon);
-      setAqi(fetchedAQI);
-    }
-
-    const forecast = await fetchForecast(trimmedCity);
-    setForecastData(forecast);
+    await loadWeather({ cityName: trimmedCity }, "city");
   }
 
   const getAqiColor = (aqi: number | null) => {
@@ -204,6 +247,7 @@ export default function WeatherDashboard() {
   };
 
   const timezone = weather?.timezone ?? 0;
+  const displayCity = weather?.name ?? city || "Your Location";
   const humidityValue =
     weather?.main?.humidity !== undefined ? `${weather.main.humidity}%` : "N/A";
   const sunriseValue = weather?.sys?.sunrise
@@ -213,7 +257,9 @@ export default function WeatherDashboard() {
     ? formatTime_LocalToCity(weather.sys.sunset, timezone)
     : "N/A";
   const description =
-    weather?.weather?.[0]?.description ?? "Search for a city to load live data";
+    weather?.weather?.[0]?.description ??
+    (isLoading ? "Loading local weather..." : "Allow location access or search for a city");
+  const forecastItems = forecastData.slice(0, 7);
 
   const metricCards: Array<{
     label: string;
@@ -267,7 +313,8 @@ export default function WeatherDashboard() {
           <button
             onClick={() => {
               setInvalidCity(false);
-              setCity("Delhi");
+              setCity("");
+              setLocationStatus("city");
             }}
             className="inline-flex items-center gap-2 rounded-md bg-amber-300 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-200"
           >
@@ -293,14 +340,14 @@ export default function WeatherDashboard() {
                   Weather Dashboard
                 </h1>
                 <p className="mt-1 text-sm text-slate-400">
-                  Live conditions, air quality, and hourly trends
+                  {locationStatusText[locationStatus]}
                 </p>
               </div>
             </div>
           </div>
 
           <form
-            className="flex w-full items-center gap-2 rounded-lg border border-white/10 bg-black/25 p-1.5 shadow-lg shadow-black/20 backdrop-blur md:w-[360px]"
+            className="flex w-full items-center gap-2 rounded-lg border border-white/10 bg-black/25 p-1.5 shadow-lg shadow-black/20 backdrop-blur md:w-[410px]"
             onSubmit={(event) => {
               event.preventDefault();
               handleSearch();
@@ -314,11 +361,30 @@ export default function WeatherDashboard() {
               className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm text-white outline-none placeholder:text-slate-500"
             />
             <button
+              type="button"
+              onClick={requestCurrentLocation}
+              disabled={isLoading}
+              className="grid h-10 w-10 flex-none place-items-center rounded-md border border-sky-300/20 bg-sky-300/10 text-sky-200 transition hover:bg-sky-300/20 disabled:cursor-not-allowed disabled:opacity-60"
+              aria-label="Use current location"
+              title="Use current location"
+            >
+              {isLoading && locationStatus === "requesting" ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <LocateFixed className="h-5 w-5" />
+              )}
+            </button>
+            <button
               type="submit"
-              className="grid h-10 w-10 flex-none place-items-center rounded-md bg-sky-300 text-slate-950 transition hover:bg-sky-200"
+              disabled={isLoading}
+              className="grid h-10 w-10 flex-none place-items-center rounded-md bg-sky-300 text-slate-950 transition hover:bg-sky-200 disabled:cursor-not-allowed disabled:opacity-60"
               aria-label="Search weather"
             >
-              <Search className="h-5 w-5" />
+              {isLoading ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Search className="h-5 w-5" />
+              )}
             </button>
           </form>
         </header>
@@ -335,7 +401,9 @@ export default function WeatherDashboard() {
                   <span className="text-7xl font-semibold leading-none text-white sm:text-8xl">
                     {weather?.main?.temp !== undefined
                       ? Math.round(weather.main.temp)
-                      : "N/A"}
+                      : isLoading
+                        ? "--"
+                        : "N/A"}
                   </span>
                   {weather?.main?.temp !== undefined && (
                     <span className="pt-2 text-2xl font-semibold text-amber-200 sm:text-3xl">
@@ -344,7 +412,7 @@ export default function WeatherDashboard() {
                   )}
                 </div>
                 <p className="mt-4 max-w-xl text-base capitalize leading-7 text-slate-300">
-                  {city}, {description}
+                  {displayCity}, {description}
                 </p>
               </div>
               <Time />
@@ -365,7 +433,7 @@ export default function WeatherDashboard() {
                         valueClassName ?? "text-white"
                       }`}
                     >
-                      {value}
+                      {isLoading && value === "N/A" ? "--" : value}
                     </p>
                   </div>
                   <div
@@ -380,53 +448,62 @@ export default function WeatherDashboard() {
         </section>
 
         <section className="grid grid-cols-1 gap-5 lg:grid-cols-[1.05fr_0.95fr]">
-          <WeatherAreaChart city={city} chartData={forecastData} />
+          <WeatherAreaChart city={displayCity} chartData={forecastData} />
 
           <div className="rounded-lg border border-white/10 bg-white/[0.045] p-5 shadow-lg shadow-black/10 backdrop-blur sm:p-6">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-xl font-semibold text-white">
-                  7-Day Forecast
+                  Hourly Forecast
                 </h2>
                 <p className="mt-1 text-sm text-slate-400">
-                  A quick look at the week ahead
+                  {forecastItems.length > 0
+                    ? "Next readings for this location"
+                    : "Waiting for forecast data"}
                 </p>
               </div>
               <CloudSun className="h-6 w-6 text-amber-200" />
             </div>
 
             <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-7">
-              {forecastDays.map(({ day, temp, label, Icon, tone }) => (
-                <div
-                  key={day}
-                  className="rounded-lg border border-white/10 bg-black/20 p-3 text-center"
-                >
-                  <p className="text-xs font-semibold text-slate-400">{day}</p>
+              {forecastItems.length > 0 ? (
+                forecastItems.map(({ time, temp }) => (
                   <div
-                    className={`mx-auto my-3 grid h-10 w-10 place-items-center rounded-md border ${tone}`}
-                    title={label}
+                    key={`${time}-${temp}`}
+                    className="rounded-lg border border-white/10 bg-black/20 p-3 text-center"
                   >
-                    <Icon className="h-5 w-5" />
+                    <p className="text-xs font-semibold text-slate-400">
+                      {time}
+                    </p>
+                    <div className="mx-auto my-3 grid h-10 w-10 place-items-center rounded-md border border-sky-300/25 bg-sky-300/10 text-sky-200">
+                      <CloudSun className="h-5 w-5" />
+                    </div>
+                    <p className="text-sm font-semibold text-white">
+                      {temp}&deg;C
+                    </p>
                   </div>
-                  <p className="text-sm font-semibold text-white">
-                    {temp}&deg;C
-                  </p>
+                ))
+              ) : (
+                <div className="col-span-full rounded-lg border border-white/10 bg-black/20 p-6 text-center text-sm text-slate-400">
+                  {isLoading ? "Loading forecast..." : "No forecast data yet"}
                 </div>
-              ))}
+              )}
             </div>
 
             <div className="mt-6 border-t border-white/10 pt-5">
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <p className="mb-1 text-sm font-medium text-slate-300">
-                    Monthly Rainfall
+                    Forecast Points
                   </p>
-                  <p className="text-3xl font-semibold text-white">45mm</p>
+                  <p className="text-3xl font-semibold text-white">
+                    {forecastData.length || "N/A"}
+                  </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm text-slate-400">This Year</p>
+                  <p className="text-sm text-slate-400">Source</p>
                   <p className="text-2xl font-semibold text-emerald-300">
-                    +17%
+                    OpenWeather
                   </p>
                 </div>
               </div>
